@@ -1,0 +1,56 @@
+# This is where psrsoft gets its list of packages
+export PSRSOFT_PKG_INDEX=http://www.pulsarastronomy.net/psrsoft/pkg_idx
+
+# The "usr/" directory that files are installed into
+
+export PSRSOFT_USR=$PSRSOFT_DIR/usr
+
+if [[ ! "$PATH" =~ "$PSRSOFT_USR/bin" ]] ; then
+	export PATH=$PSRSOFT_USR/bin:${PATH}
+fi
+
+# Options to pass to make. -j[N] uses [N] threads
+
+export PSRSOFT_MAKEOPTS="-j5"
+
+# Now the standard compiler options.
+
+export LDFLAGS="-L$PSRSOFT_USR/lib $LDFLAGS"
+export CFLAGS="-I$PSRSOFT_USR/include $CFLAGS"
+export CXXFLAGS="-I$PSRSOFT_USR/include $CXXFLAGS"
+export CC=gcc  # Make sure to set this to your C compiler
+export CXX=g++ # And for C++
+export F77=gfortran # A compatible F77 compiler (prefer gfortran)
+export FC=$F77
+export FLIBS=-lgfortran # The flags required to link fortran to C.
+export PYTHON=/usr/bin/python
+
+# this is the path to your java install root.
+# The java binary must be at $JAVA_HOME/bin/java
+# The javac binary must be at $JDK_HOME/bin/javac
+# Common values are:
+# MacOSX -- /usr/
+# Linux  -- /usr/local/jdk*/  (or similar)
+export JAVA_HOME=/usr/
+export JDK_HOME=$JAVA_HOME
+
+# make sure the java binaries are in the path
+export PATH=$JDK_HOME/bin:${PATH}
+
+export PYTHONPATH=$PSRSOFT_USR/share/python
+
+
+# File format code to compile for DSPSR
+export DSPSR_FORMATS="apsr bpsr cpsr cpsr2 pmdaq sigproc fits"
+
+
+if [ -d $PSRSOFT_USR/var/psrsoft/env/bash/ ] ; then
+for i in $PSRSOFT_USR/var/psrsoft/env/bash/* ; do
+	. $i
+done
+fi
+# History search
+ bind '"\033[A":history-search-backward'
+ bind '"\033[B":history-search-forward'
+
+

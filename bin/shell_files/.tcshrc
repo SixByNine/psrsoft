@@ -1,0 +1,2 @@
+set prompt="${prompt}:psrsoft> "
+setenv HOME $REAL_HOME

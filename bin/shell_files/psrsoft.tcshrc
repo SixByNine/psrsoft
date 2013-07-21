@@ -1,0 +1,8 @@
+setenv PSRSOFT_USR $PSRSOFT_DIR/usr
+setenv PATH $PSRSOFT_USR/bin:$PATH
+setenv LD_LIBRARY_PATH $PSRSOFT_USR/lib:$LD_LIBRARY_PATH
+
+foreach env ( $PSRSOFT_USR/var/psrsoft/env/tcsh/* )
+	source $env
+end
+

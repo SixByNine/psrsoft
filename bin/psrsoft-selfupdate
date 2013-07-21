@@ -1,0 +1,28 @@
+#!/bin/bash
+
+set +o verbose
+PSRSOFT_BIN=`dirname $0`
+PSRSOFT_DIR=`dirname $PSRSOFT_BIN`
+
+cd $PSRSOFT_DIR
+export PSRSOFT_DIR=`pwd`
+cd $PSRSOFT_DIR/pkg_files
+\rm -f psrsoft.tar.gz
+wget --no-cache -N http://www.pulsarastronomy.net/psrsoft/psrsoft.tar.gz
+if [[ -e psrsoft.tar.gz ]] ; then
+	tar -C ../.. -xvzf psrsoft.tar.gz
+	echo "done"
+else
+	echo "Could not update"
+	exit 1
+fi
+
+
+if [[ -e $PSRSOFT_DIR/config/profile ]] ; then
+   if grep -q "atnf.csiro.au" $PSRSOFT_DIR/config/profile ; then
+	  sed -i.bak -e "s:www.atnf.csiro.au:www.pulsarastronomy.net:g" $PSRSOFT_DIR/config/profile
+	  echo ""
+	  echo "NOTICE: You have been updated the pulsarastronomy.net package index"
+	  echo "This is a good thing :)"
+   fi
+fi

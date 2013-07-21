@@ -1,0 +1,5 @@
+#!/bin/bash
+cd `dirname $0`
+cp config/profile.example.in config/profile.example
+tar -C .. -czf psrsoft.tar.gz psrsoft/bin psrsoft/config/profile.example
+scp psrsoft.tar.gz pa:./www/psrsoft/

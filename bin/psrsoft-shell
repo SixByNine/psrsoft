@@ -1,0 +1,32 @@
+#!/bin/bash -i
+opt=$*
+export PSRSOFT_SCRIPT=""
+for arg in $* ; do
+	if [ -e $arg ] ; then
+		export PSRSOFT_SCRIPT=$arg
+		break
+	fi
+done
+
+PSRSOFT_DIR=`dirname $0`"/../"
+export PSRSOFT_DIR=`cd $PSRSOFT_DIR ; pwd`
+export PSRSOFT_SHELL="bash"
+if [[ ( "$opt" =~ "--tcsh" ) ]] ; then
+	export PSRSOFT_SHELL="env HOME=$PSRSOFT_DIR/bin/shell_files/ REAL_HOME=$HOME oldprompt=$prompt tcsh"
+fi
+if [[ ( "$opt" =~ "--csh" ) ]] ; then
+	export PSRSOFT_SHELL="csh -f"
+fi
+
+psrsoft_rc=$PSRSOFT_DIR/bin/shell_files/psrsoft.bashrc
+norc=""
+noenv=""
+export OLDPROMPT=$PS1
+if [[ ( "$opt" =~ "--fresh" ) ]] ; then
+	noenv="-i PATH=/bin/:/usr/bin PSRSOFT_FRESH=yes"
+	noenv="$noenv PSRSOFT_SCRIPT=$PSRSOFT_SCRIPT PSRSOFT_DIR=$PSRSOFT_DIR USER=$USER HOST=$HOST OLDPROMPT=$PS1 TERM=$TERM HOME=$HOME DISPLAY=$DISPLAY"
+fi
+
+	
+
+env $noenv PSRSOFT_SHELL="$PSRSOFT_SHELL" /bin/bash --rcfile $psrsoft_rc
