@@ -1,0 +1,37 @@
+#!/bin/bash
+
+set +o verbose
+PSRSOFT_BIN=`cd $(dirname $0); pwd`
+
+PSRSOFT_DIR=`dirname $PSRSOFT_BIN`
+
+cd $PSRSOFT_DIR
+
+export PSRSOFT_DIR=`pwd`
+
+
+. $PSRSOFT_DIR/config/profile
+
+
+if [[ -z "$PSRSOFT_USR" ]] ; then
+		export PSRSOFT_USR=$PSRSOFT_DIR/usr
+fi
+
+mkdir -p $PSRSOFT_USR/var/psrsoft
+if [[ ! -e $PSRSOFT_USR/var/psrsoft/installed.pkg ]] ; then
+	touch $PSRSOFT_USR/var/psrsoft/installed.pkg
+fi
+if [[ ! -e $PSRSOFT_USR/var/psrsoft/dirty.pkg ]] ; then
+	touch $PSRSOFT_USR/var/psrsoft/dirty.pkg
+fi
+
+mkdir -p $PSRSOFT_DIR/pkg_files
+
+cd $PSRSOFT_DIR
+
+
+export PSRSOFT_TREE="stable"
+
+
+
+$PSRSOFT_BIN/psrsoft.py $*
