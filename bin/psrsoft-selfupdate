@@ -26,3 +26,12 @@ if [[ -e $PSRSOFT_DIR/config/profile ]] ; then
 	  echo "This is a good thing :)"
    fi
 fi
+
+if [[ -e $PSRSOFT_DIR/config/profile ]] ; then
+   if grep -q "people/Michael.Keith" $PSRSOFT_DIR/config/profile ; then
+	  sed -i.bak -e "s:people/Michael.Keith/::g" $PSRSOFT_DIR/config/profile
+	  echo ""
+	  echo "NOTICE: You have been updated the pulsarastronomy.net package index"
+	  echo "This is a good thing :)"
+   fi
+fi
