@@ -13,6 +13,10 @@ fi
 
 export PSRSOFT_MAKEOPTS="-j5"
 
+# git command
+export psrsoft_git=git
+
+
 # Now the standard compiler options.
 
 export LDFLAGS="-L$PSRSOFT_USR/lib $LDFLAGS"
