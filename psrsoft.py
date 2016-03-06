@@ -5,7 +5,6 @@ import os
 import logging
 import argparse
 
-__version__="2.0.0"
 
 
 
@@ -33,7 +32,7 @@ if __name__=="__main__":
     parser.add_argument("--install-path",action='store',help="Manual set install root")
 
 
-    parser.add_argument("cmd",action='store',nargs=1,help="One of %(choices)s",choices=["install","update","remove","info"],metavar="action")
+    parser.add_argument("cmd",action='store',help="One of %(choices)s",choices=["install","update","remove","info"],metavar="action")
     
     
     parser.add_argument("pkg",action='store',nargs='*',help="Package to install")
@@ -61,16 +60,17 @@ if __name__=="__main__":
         args.psrsoft_url="https://github.com/SixByNine/psrsoft.git"
     psrsoft_url=args.psrsoft_url
 
+
+    logging.debug("Command was %s"%args.cmd)
     if args.update or args.cmd=="update":
         logging.debug("Check for update")
         if not exe("cd %(path)s && git pull --rebase %(url)s master"%{'path':psrsoft_path,'url':psrsoft_url}):
             logging.warning("Could not get updates")
 
-
-
     sys.path.append("%s/lib/requests"%psrsoft_path)
     sys.path.append("%s/lib"%psrsoft_path)
-    from psrsoft_core import *
+    import psrsoft_core as psrsoft
+    logging.debug("Psrsoft version: %s"%psrsoft.__version__)
 
     got_requests=False
     try:
@@ -94,4 +94,4 @@ if __name__=="__main__":
 
     logging.debug("Good to go... starting psrsoft")
 
-    engine = psrsoft(args)
+    engine = psrsoft.psrsoft(args)
