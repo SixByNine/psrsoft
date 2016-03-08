@@ -5,18 +5,6 @@ import os
 import logging
 import argparse
 
-
-
-
-def exe(cmd):
-    logging.debug("Exec '%s'"%cmd)
-    ret=os.system(cmd)
-    if ret==0:
-        return True
-    else:
-        logging.warning("Command failed: %s"%cmd)
-        return False
-
 if __name__=="__main__":
     logging.basicConfig(format="%(levelname)s: %(msg)s",level=logging.INFO)
     logging.debug("python version %s"%sys.version_info)
@@ -27,9 +15,7 @@ if __name__=="__main__":
     parser.add_argument("-v","--debug",action='store_true',help="Activate verbose logging")
     parser.add_argument("-u","--update",action='store_true',help="Update psrsoft and repos before taking any action")
     parser.add_argument("-I","--interactive",action='store_true',help="Interactive installation")
-    parser.add_argument("--psrsoft-path",action='store',help="Manual set psrsoft path")
-    parser.add_argument("--psrsoft-url",action='store',help="Manual set psrsoft url")
-    parser.add_argument("--install-path",action='store',help="Manual set install root")
+    parser.add_argument("-c",action='store',help="Use specified config file",default=None,metavar="FILE.cfg")
 
 
     parser.add_argument("cmd",action='store',help="One of %(choices)s",choices=["install","update","remove","info"],metavar="action")
@@ -44,33 +30,45 @@ if __name__=="__main__":
         print "***VERBOSE MODE ENABLED***"
         logging.getLogger().setLevel(logging.DEBUG)
 
-    if args.psrsoft_path==None:
+    args.cfg=args.c
+
+    psrsoft_dir=os.environ.get('PSRSOFT_DIR')
+    if psrsoft_dir==None:
         try:
-            logging.debug("searching for psrsoft_path")
+            logging.debug("searching for psrsoft_dir")
             my_path = os.path.realpath(__file__)
-            args.psrsoft_path=os.path.dirname(my_path)
+            psrsoft_dir=os.path.dirname(my_path)
         except Exception as e:
-            logging.error("Could not determine psrsoft path, have to set on command line")
+            logging.error("Could not determine psrsoft path, please set $PSRSOFT_DIR to the root of the psrsoft install")
             raise e
 
-    psrsoft_path=args.psrsoft_path
-    logging.debug("psrsoft_path = %s"%psrsoft_path)
+    logging.debug("psrsoft_dir = %s"%psrsoft_dir)
 
-    if args.psrsoft_url==None:
-        args.psrsoft_url="https://github.com/SixByNine/psrsoft.git"
-    psrsoft_url=args.psrsoft_url
+    if args.cfg==None:
+        args.cfg = "%s/psrsoft.cfg"%psrsoft_dir
 
+    
+    sys.path.append("%s/lib/requests"%psrsoft_dir)
+    sys.path.append("%s/lib"%psrsoft_dir)
+    import psrsoft_core as psrsoft
+
+    cfg = psrsoft.config(args.cfg)
+    psrsoft_url=cfg['url']
+
+    oldv=psrsoft.__version__
+    logging.debug("Psrsoft version: %s"%psrsoft.__version__)
 
     logging.debug("Command was %s"%args.cmd)
     if args.update or args.cmd=="update":
         logging.debug("Check for update")
-        if not exe("cd %(path)s && git pull --rebase %(url)s master"%{'path':psrsoft_path,'url':psrsoft_url}):
+        if not psrsoft.exe("cd %(path)s && git pull --rebase %(url)s master"%{'path':psrsoft_dir,'url':psrsoft_url}):
             logging.warning("Could not get updates")
 
-    sys.path.append("%s/lib/requests"%psrsoft_path)
-    sys.path.append("%s/lib"%psrsoft_path)
-    import psrsoft_core as psrsoft
+    reload(psrsoft)
     logging.debug("Psrsoft version: %s"%psrsoft.__version__)
+    if oldv != psrsoft.__version__:
+        logging.debug("Reload config file with new version")
+        cfg = psrsoft.config(args.cfg)
 
     got_requests=False
     try:
@@ -82,7 +80,7 @@ if __name__=="__main__":
     if not got_requests:
         logging.warning("Could not find requests library... try to install")
 
-        ret = os.system("git clone https://github.com/kennethreitz/requests.git %s/lib/requests"%psrsoft_path)
+        ret = os.system("git clone https://github.com/kennethreitz/requests.git %s/lib/requests"%psrsoft_dir)
         if ret!=0:
             logging.error("Could not download requests library from github")
         else:
@@ -95,3 +93,4 @@ if __name__=="__main__":
     logging.debug("Good to go... starting psrsoft")
 
     engine = psrsoft.psrsoft(args)
+    engine.run()
