@@ -1,0 +1,47 @@
+package tempo2
+version LIVE
+
+installer automake
+
+
+requires fortran
+requires c++
+requires libtool
+requires automake
+requires autoconf
+
+using tempo2plugins Adds tempo2 standard plugins to build list
+    makeopts += plugins
+
+using tempo2unsupported Adds tempo2 unsuported plugins to build list
+    makeopts += unsupported
+
+using temponest
+    unsupported Not currently supported in psrsoft.
+
+using pgplot   Enable pgplot based graphical plugins
+    requires pgplot
+
+using fftw     Enables some fftw based routines
+    requires fftw3
+
+using lapack   Enables accelerated linear algebra
+    requires lapack
+    requires blas
+
+
+clone https://mkeith@bitbucket.org/psrsoft/tempo2.git master
+
+environ TEMPO2 share/tempo2
+
+configureopts --with-tempo2-plug-dir={$PREFIX}/share/tempo2/plugins
+
+
+precopy T2runtime
+    to share/tempo2
+
+preexec bootstrap
+
+
+
+

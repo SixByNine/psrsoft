@@ -1,0 +1,1 @@
+#automake installer for psrsoft
