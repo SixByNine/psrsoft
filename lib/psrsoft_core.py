@@ -6,12 +6,19 @@ import argparse
 
 __version__="2.0.0"
 
-class psrsoft:
+class psrsoft(object):
     def __init__(self,args):
         self.args=args
 
     def run(self):
-        pass
+        import psrsoft_automake
+        self.pkgtypes=dict()
+        self.pkgtypes["automake"] = psrsoft_automake.package
+        logging.debug("PkgTypes: "+", ".join(self.pkgtypes.keys()))
+        p=package()
+        p.parse(open("packages/tempo2/tempo2-repo.install"))
+        p2 = psrsoft_automake.package(p)
+        print p,p2
 
 class config(dict):
     def __init__(self,fname):
@@ -64,4 +71,41 @@ def exe(cmd):
         logging.warning("Command failed: %s"%cmd)
         return False
 
+
+class packageoption(object):
+    def __init__(self):
+        pass
+
+
+class package(object):
+    def __init__(self):
+        self.dependancies=dict()
+        self.options=dict()
+        self.pkgtype="none"
+        self.sparelines = list()
+
+    def parseline(self,line):
+        e = line.split("#")
+        if len(e) < 1:
+            return False
+        line2=e[0]
+        e = line2.split()
+        if len(e) < 1:
+            return False
+        key = e[0].lower().strip()
+        rest=line2[len(key)+1:].strip()
+        if key=="package":
+            self.name=rest
+            return True
+        if key=="version":
+            self.version=rest
+            return True
+        if key=="installer":
+            self.pkgtype=rest
+            return True
+        self.sparelines.append(line)
+
+    def parse(self,f):
+        for line in f:
+            self.parseline(line)
 
