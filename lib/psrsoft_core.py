@@ -12,13 +12,10 @@ class psrsoft(object):
 
     def run(self):
         import psrsoft_automake
-        self.pkgtypes=dict()
-        self.pkgtypes["automake"] = psrsoft_automake.package
-        logging.debug("PkgTypes: "+", ".join(self.pkgtypes.keys()))
-        p=package()
-        p.parse(open("packages/tempo2/tempo2-repo.install"))
-        p2 = psrsoft_automake.package(p)
-        print p,p2
+        package.types["automake"] = psrsoft_automake.package
+        logging.debug("PkgTypes: "+", ".join(package.types.keys()))
+        pkg = package.parse(open("packages/tempo2/tempo2-repo.install"))
+        print pkg
 
 class config(dict):
     def __init__(self,fname):
@@ -77,12 +74,62 @@ class packageoption(object):
         pass
 
 
+class tag(object):
+    EQUAL="="
+    LEQ="<="
+    GEQ=">="
+
+    def __init__(self,name,version):
+        self.name=name
+        self.version=version
+
+    def compare(self,other):
+        if not other.name==self.name:
+            return False
+        vt1,vv1 = self.splitversion(other,version)
+        vt2,vv2 = self.splitversion(self.version)
+
+        # Trivial case
+        if vt1 is tag.EQUAL and vt2 is tag.EQUAL:
+            return vv1==vv2
+        
+        lhs = False
+        rhs = False
+        if vt2 is tag.LEQ:
+            lhs = vt2 <= vt1
+
+        if vt2 is tag.GEQ:
+            lhs = vt2 >= vt1
+
+        if vt1 is tag.LEQ:
+            rhs = vt1 <= vt2
+
+        if vt1 is tag.GEQ:
+            rhs = vt1 >= vt2
+
+        return lhs and rhs
+
+
+    def splitversion(self,verstring):
+        e = verstring.split()
+        if len(e)==1 or e[0]=="=":
+            return tag.EQUAL,e
+        if e[0]==">=":
+            return tag.GEQ,e[1]
+        if e[0]=="<=":
+            return tag.LEQ,e[1]
+        
+
 class package(object):
+    types=dict()
+
     def __init__(self):
         self.dependancies=dict()
-        self.options=dict()
         self.pkgtype="none"
         self.sparelines = list()
+
+        self.requires = list()
+        self.options  = dict()
 
     def parseline(self,line):
         e = line.split("#")
@@ -105,7 +152,14 @@ class package(object):
             return True
         self.sparelines.append(line)
 
-    def parse(self,f):
+    @classmethod
+    def parse(cls,f):
+        obj = cls()
         for line in f:
-            self.parseline(line)
+            obj.parseline(line)
 
+        # Detect the correct object type
+        if obj.pkgtype in cls.types:
+            return cls.types[obj.pkgtype](obj)
+        else:
+            return None
