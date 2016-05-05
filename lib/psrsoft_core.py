@@ -86,7 +86,9 @@ class tag(object):
     def compare(self,other):
         if not other.name==self.name:
             return False
-        vt1,vv1 = self.splitversion(other,version)
+        if self.version=="" or other.version=="":
+            return True
+        vt1,vv1 = other.splitversion(other.version)
         vt2,vv2 = self.splitversion(self.version)
 
         # Trivial case
@@ -118,7 +120,21 @@ class tag(object):
             return tag.GEQ,e[1]
         if e[0]=="<=":
             return tag.LEQ,e[1]
-        
+
+    def __repr__(self):
+        return "%s %s"%(self.name,self.version)
+
+
+class usingclause(object):
+    def __init__(self,name):
+        self.name=name
+        self.requires=list()
+        self.vars=dict()
+        self.desc=""
+        self.sparelines=list()
+
+    def __repr__(self):
+        return "%s [%s]"%(self.name,self.desc)
 
 class package(object):
     types=dict()
@@ -129,28 +145,59 @@ class package(object):
         self.sparelines = list()
 
         self.requires = list()
-        self.options  = dict()
+        self.usingclauses = dict()
+        self.vars = dict()
+        self.currentclause=None
 
     def parseline(self,line):
         e = line.split("#")
         if len(e) < 1:
             return False
         line2=e[0]
+        if line2==line2.lstrip():
+            self.currentclause=None
+        nic = (self.currentclause == None)
         e = line2.split()
         if len(e) < 1:
             return False
         key = e[0].lower().strip()
         rest=line2[len(key)+1:].strip()
-        if key=="package":
+        if key=="package" and nic:
             self.name=rest
             return True
-        if key=="version":
+        if key=="version" and nic:
             self.version=rest
+            self.tag = tag(self.name,self.version)
             return True
-        if key=="installer":
+        if key=="installer" and nic:
             self.pkgtype=rest
             return True
-        self.sparelines.append(line)
+        if key=="requires":
+            e = rest.split()
+            if nic:
+                self.requires.append(tag(e[0]," ".join(e[1:])))
+            else:
+                self.currentclause.requires.append(tag(e[0]," ".join(e[1:])))
+            return True
+        if len(e) > 2 and e[1] == "+=" or e[1] =="=":
+            val = ' '.join(e[2:])
+            if not key in self.vars or e[1]=="+=":
+                self.vars[key] = [val]
+            else:
+                self.vars[key].append(val)
+            return True
+
+        if key=="using" and nic:
+            self.currentclause = usingclause(e[1])
+            if len(e) > 2:
+                self.currentclause.desc=' '.join(e[2:])
+            self.usingclauses[e[1]] = self.currentclause
+            return True
+
+        if nic:
+            self.sparelines.append(line)
+        else:
+            self.currentclause.sparelines.append(line)
 
     @classmethod
     def parse(cls,f):

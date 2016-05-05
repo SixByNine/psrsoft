@@ -9,7 +9,9 @@ class package(core.package):
     def __init__(self,generic):
         self.__dict__ = generic.__dict__.copy()
         self.pkgtype="automake"
+        print self.usingclauses
+        print self.requires
         for line in self.sparelines:
             self.parseline(line)
     def parseline(self,line):
-        print line
+        print line.rstrip()

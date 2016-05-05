@@ -32,15 +32,16 @@ using lapack   Enables accelerated linear algebra
 
 clone https://mkeith@bitbucket.org/psrsoft/tempo2.git master
 
-environ TEMPO2 share/tempo2
+TEMPO2 = {$PREFIX}/share/tempo2
+export TEMPO2
 
-configureopts --with-tempo2-plug-dir={$PREFIX}/share/tempo2/plugins
+configureopts += --with-tempo2-plug-dir={$PREFIX}/share/tempo2/plugins
 
 
 precopy T2runtime
     to share/tempo2
 
-preexec bootstrap
+preexec += bootstrap
 
 
 
