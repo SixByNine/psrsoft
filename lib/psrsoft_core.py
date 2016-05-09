@@ -2,20 +2,39 @@ import sys
 import os
 import logging
 import argparse
-
+import re
+import fnmatch
+import os
 
 __version__="2.0.0"
 
 class psrsoft(object):
     def __init__(self,args):
         self.args=args
+        self.pkgcache=[]
 
     def run(self):
         import psrsoft_automake
         package.types["automake"] = psrsoft_automake.package
         logging.debug("PkgTypes: "+", ".join(package.types.keys()))
-        pkg = package.parse(open("packages/tempo2/tempo2-repo.install"))
+        self.buildpkgcache()
+
+        pkg = package.parse(open("packages/tempo2/tempo2-repo.package"))
         print pkg
+        print pkg.getdeps(self.pkgcache,[])
+
+
+    def buildpkgcache(self):
+        matches = []
+        self.pkgcache = []
+        for root, dirnames, filenames in os.walk('packages/'):
+            for filename in fnmatch.filter(filenames, '*.package'):
+                        matches.append(os.path.join(root, filename))
+        for m in matches:
+            with open(m) as f:
+                pkg = package.parse(f)
+                print m,pkg
+                self.pkgcache.append(pkg)
 
 class config(dict):
     def __init__(self,fname):
@@ -121,6 +140,8 @@ class tag(object):
         if e[0]=="<=":
             return tag.LEQ,e[1]
 
+    def __str__(self):
+        return self.__repr__()
     def __repr__(self):
         return "%s %s"%(self.name,self.version)
 
@@ -130,6 +151,7 @@ class usingclause(object):
         self.name=name
         self.requires=list()
         self.vars=dict()
+        self.xlinks = list()
         self.desc=""
         self.sparelines=list()
 
@@ -140,16 +162,47 @@ class package(object):
     types=dict()
 
     def __init__(self):
-        self.dependancies=dict()
-        self.pkgtype="none"
+        self.pkgtype="basic"
         self.sparelines = list()
 
         self.requires = list()
         self.usingclauses = dict()
         self.vars = dict()
+        self.xlinks = list()
         self.currentclause=None
+        self.kvregex=re.compile("\s*([A-Za-z_][A-Za-z0-9_]*)\s*(\+?=)\s*([^\s'\"#]+|\"[^\"]+\"|'[^']+')")
+
+
+    def getdeps(self, pkgcache, use, installed=[]):
+        requires = list(self.requires)
+
+        for u in use:
+            if u in usingclauses:
+                requires.append(u.requires)
+        deps = list()
+        for r in list(requires):
+            for p in installed:
+                if r.compare(p.tag):
+                    requires.remove(r)
+                    break
+            for p in pkgcache:
+                if r.compare(p.tag):
+                    deps.append(p)
+                    requires.remove(r)
+                    break
+        for d in list(deps):
+            deps.append(d.getdeps(pkgcache,use,deps))
+        for r in requires:
+            # left over entries are cache misses
+            deps.append(missingpkg(r))
+        return deps
+
+
+
+
 
     def parseline(self,line):
+
         e = line.split("#")
         if len(e) < 1:
             return False
@@ -157,11 +210,28 @@ class package(object):
         if line2==line2.lstrip():
             self.currentclause=None
         nic = (self.currentclause == None)
+        if nic:
+            cobj=self
+        else:
+            cobj=self.currentclause
         e = line2.split()
         if len(e) < 1:
             return False
+
+
+        match = self.kvregex.match(line)
+        if match:
+            g= match.groups()
+            if g[1]=="+=" and g[0] in cobj.vars:
+                cobj.vars[g[0]].append(g[2])
+            else:
+                cobj.vars[g[0]] = [g[2]]
+            return True
+
+
         key = e[0].lower().strip()
         rest=line2[len(key)+1:].strip()
+
         if key=="package" and nic:
             self.name=rest
             return True
@@ -179,12 +249,8 @@ class package(object):
             else:
                 self.currentclause.requires.append(tag(e[0]," ".join(e[1:])))
             return True
-        if len(e) > 2 and e[1] == "+=" or e[1] =="=":
-            val = ' '.join(e[2:])
-            if not key in self.vars or e[1]=="+=":
-                self.vars[key] = [val]
-            else:
-                self.vars[key].append(val)
+        if key=="link":
+            cobj.xlinks.append(rest)
             return True
 
         if key=="using" and nic:
@@ -205,8 +271,21 @@ class package(object):
         for line in f:
             obj.parseline(line)
 
-        # Detect the correct object type
-        if obj.pkgtype in cls.types:
-            return cls.types[obj.pkgtype](obj)
+        if obj.pkgtype == "basic":
+            return obj
         else:
-            return None
+            # Detect the correct object type
+            if obj.pkgtype in cls.types:
+                return cls.types[obj.pkgtype](obj)
+            else:
+                return None
+
+class missingpkg(package):
+    def __init__(self,t):
+        super(package,self).__init__()
+        self.pkgtype="missing"
+        self.version=t
+    def __repr__(self):
+        return "MISSING PKG: %s"%(self.version)
+
+

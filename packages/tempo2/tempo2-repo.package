@@ -1,8 +1,7 @@
 package tempo2
 version LIVE
 
-installer automake
-
+type automake
 
 requires fortran
 requires c++
@@ -29,7 +28,6 @@ using lapack   Enables accelerated linear algebra
     requires lapack
     requires blas
 
-
 clone https://mkeith@bitbucket.org/psrsoft/tempo2.git master
 
 TEMPO2 = {$PREFIX}/share/tempo2
@@ -37,12 +35,18 @@ export TEMPO2
 
 configureopts += --with-tempo2-plug-dir={$PREFIX}/share/tempo2/plugins
 
+test0 += abcd
+test1=abcd
+test2+=abcd
+test3 +=abcd
+test4 = abcd
+test5 += "ab cd ef"
+test6+='ab cc dd'
 
-precopy T2runtime
-    to share/tempo2
+
+install += T2runtime
+link T2runtime {$PREFIX}/share/tempo2
 
 preexec += bootstrap
-
-
 
 

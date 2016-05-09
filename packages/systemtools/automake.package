@@ -1,0 +1,4 @@
+package automake
+version 0
+
+type detect

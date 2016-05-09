@@ -1,0 +1,4 @@
+package autoconf
+version 0
+
+type detect
