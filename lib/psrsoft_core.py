@@ -1,10 +1,11 @@
 import sys
-import os
+import os,shutil
 import logging
 import argparse
 import re
 import fnmatch
 import os
+import uuid
 
 __version__="2.0.0"
 
@@ -12,6 +13,7 @@ class psrsoft(object):
     def __init__(self,args):
         self.args=args
         self.pkgcache=[]
+        self.cfg = config(args.cfg)
 
     def run(self):
         import psrsoft_automake
@@ -22,6 +24,19 @@ class psrsoft(object):
         pkg = package.parse(open("packages/tempo2/tempo2-repo.package"))
         print pkg
         print pkg.getdeps(self.pkgcache,[])
+        ipath,bpath,lpath,spath = self.getpaths(pkg)
+        pkg.build(ipath,bpath,spath)
+        pkg.link(ipath,lpath)
+        exe("rm -rf %s"%(bpath))
+
+    def getpaths(self,pkg):
+        uid=uuid.uuid1()
+        ipath = "%s/%s"%(self.cfg['installpath'],pkg.tag.asfilename())
+        bpath = "%s/%s-%s"%(self.cfg['buildpath'],pkg.tag.asfilename(),uid)
+        spath = "%s/%s-%s"%(self.cfg['srcpath'],pkg.tag.asfilename(),uid)
+        lpath = "%s"%(self.cfg['linkpath'])
+
+        return os.path.expandvars(ipath),os.path.expandvars(bpath),os.path.expandvars(lpath),os.path.expandvars(spath)
 
 
     def buildpkgcache(self):
@@ -37,24 +52,43 @@ class psrsoft(object):
                 self.pkgcache.append(pkg)
 
 class config(dict):
-    def __init__(self,fname):
+    def __init__(self,fname,load=True):
         self.desc = dict()
         self.desc['url'] = "Git URL for updating psrsoft."
         self['url']="https://github.com/SixByNine/psrsoft.git"
+        self['installpath']="$psrsoft_dir/install"
+        self['buildpath']="$psrsoft_dir/work/build"
+        self['srcpath']="$psrsoft_dir/work/src"
+        self['linkpath']="$psrsoft_dir/usr"
 
-        self.reload(fname)
+        self.defaultenv("make","make")
+        self.defaultenv("cc","gcc")
+        self.defaultenv("cxx","g++")
+        self.defaultenv("f77","gfortran")
+        self.defaultenv("editor","vi")
+        if load:
+            self.reload(fname)
+
+    def defaultenv(self,k,v):
+        if k.upper() in os.environ:
+            self[k] = "$%s"%k.upper()
+        elif k.lower() in os.environ:
+            self[k] = "$%s"%k.lower()
+        else:
+            self[k] = v
+
 
     def reload(self,fname):
+
+        kvregex=re.compile("\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([^\s'\"#]+|\"[^\"]+\"|'[^']+')")
         try:
             with open(fname) as infile:
                 for line in infile:
                     line = line.strip()
-                    if line.startswith("#"):
-                        continue
-                    split = line.split("=",1)
-                    key=split[0].lower().strip()
-                    val=split[-1].strip("'\" ").strip()
-                    self[key] = val
+                    match = kvregex.match(line)
+                    if match:
+                        g=match.groups()
+                        self[g[0]] = g[1]
         except IOError as e:
             logging.warning("Could not read config file '%s'"%fname)
             print "Do you want to try to create a new config file?"
@@ -62,12 +96,7 @@ class config(dict):
             if yn.lower()=="y" or yn=="":
                 print "Creating config file, '%s'"%fname
                 try:
-                    with open(fname,"w") as ofile:
-                        for key in self.keys():
-                            if key in self.desc:
-                                ofile.write("# %s\n"%(self.desc[key]))
-                            ofile.write("# %s = %s\n\n"%(key.upper(),self[key]))
-                    ofile.close()
+                    self.write(fname)
                     exe("$EDITOR %s"%fname)
                     self.reload(fname)
                 except Error as e:
@@ -76,6 +105,25 @@ class config(dict):
 
             else:
                 logging.warning("Continuing with default configuration")
+        for v in self:
+            os.environ[v.upper()] = self[v]
+            os.environ[v.lower()] = self[v]
+
+    def write(self,fname):
+        comp=config("",load=False)
+        with open(fname,"w") as ofile:
+            logging.debug("writing %s"%fname)
+            for key in self.keys():
+                logging.debug("key='%s'"%key)
+                if self[key] == comp[key]:
+                    c="# "
+                else:
+                    c=""
+                if key in self.desc:
+                    ofile.write("# %s\n"%(self.desc[key]))
+                ofile.write("%s%s = %s\n\n"%(c,key,self[key]))
+            ofile.close()
+
 
 
 def exe(cmd):
@@ -141,9 +189,15 @@ class tag(object):
             return tag.LEQ,e[1]
 
     def __str__(self):
-        return self.__repr__()
-    def __repr__(self):
         return "%s %s"%(self.name,self.version)
+    def __repr__(self):
+        return self.asfilename()
+
+    def asfilename(self):
+        ret = "%s-%s"%(self.name,self.version)
+        ret = re.sub(r"\s+", "_", ret, flags=re.UNICODE)
+        return ret
+
 
 
 class usingclause(object):
@@ -171,6 +225,61 @@ class package(object):
         self.xlinks = list()
         self.currentclause=None
         self.kvregex=re.compile("\s*([A-Za-z_][A-Za-z0-9_]*)\s*(\+?=)\s*([^\s'\"#]+|\"[^\"]+\"|'[^']+')")
+        self.vars['linkpaths'] = ['bin','lib','include']
+
+
+    def build(self,installdir,builddir,srcdir):
+        # get the files!
+        srcdir=os.path.abspath(srcdir)
+        builddir=os.path.abspath(builddir)
+        installdir=os.path.abspath(installdir)
+        os.environ["srcdir"]=srcdir
+        os.environ["builddir"]=srcdir
+        os.environ["installdir"]=srcdir
+        os.environ["PREFIX"]=installdir
+        exe("mkdir -p %s"%builddir)
+        exe("mkdir -p %s"%srcdir)
+        exe("rm -rf %s && mkdir -p %s"%(installdir,installdir))
+
+        if "clone" in self.vars:
+            for repo in self.vars['clone']:
+                if not exe("rmdir %s && git clone %s %s"%(srcdir,repo,srcdir)):
+                    return False
+
+        if "preexec" in self.vars:
+            for cmd in self.vars['preexec']:
+                exe("cd %s && %s"%(srcdir,cmd))
+
+        if "installsrc" in self.vars:
+            for f in self.vars['installsrc']:
+                shutil.move("%s/%s"%(srcdir,f),installdir)
+
+    def link(self,installdir,linkdir):
+        for p in self.vars['linkpaths']:
+            try:
+                for f in os.listdir("%s/%s"%installdir,p):
+                    logger.debug("linking %s"%f)
+                    fname = os.basename(f)
+                    if os.path.isfile(fname):
+                        logger.warning("%s already exists in %s/%s"%(fname,linkdir,p))
+                        logger.warning("Maybe this package is already linked as a different version? Try psrsoft relink %s"%(pkg.name))
+                        self.unlink(installdir,linkdir)
+                        return False
+                    exe("ln -s %s %s/%s/%s"%(f,linkdir,p,fname))
+            except IOError as e:
+                logger.warning(e)
+
+        return True
+
+
+    def unlink(self,installdir,linkdir):
+        matchpath = os.path.abspath(linkdir)+'/'
+        for root, dirnames, filenames in os.walk('linkdir', followlinks=False):
+            for fname in filenames:
+                tgt = os.path.abspath(os.readlink(os.path.join(root, fname)))
+                tgt.startswith(matchpath)
+                logger.debug("remove %s"%tgt)
+
 
 
     def getdeps(self, pkgcache, use, installed=[]):
@@ -222,10 +331,14 @@ class package(object):
         match = self.kvregex.match(line)
         if match:
             g= match.groups()
+            var=g[2]
+            if (var[0]=='"' and var[-1]=='"') or (var[0]=="'" and var[-1]=="'"):
+                var = var[1:-1]
+
             if g[1]=="+=" and g[0] in cobj.vars:
-                cobj.vars[g[0]].append(g[2])
+                cobj.vars[g[0]].append(var)
             else:
-                cobj.vars[g[0]] = [g[2]]
+                cobj.vars[g[0]] = [var]
             return True
 
 
@@ -239,7 +352,7 @@ class package(object):
             self.version=rest
             self.tag = tag(self.name,self.version)
             return True
-        if key=="installer" and nic:
+        if key=="type" and nic:
             self.pkgtype=rest
             return True
         if key=="requires":

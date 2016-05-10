@@ -3,12 +3,6 @@ version LIVE
 
 type automake
 
-requires fortran
-requires c++
-requires libtool
-requires automake
-requires autoconf
-
 using tempo2plugins Adds tempo2 standard plugins to build list
     makeopts += plugins
 
@@ -28,25 +22,16 @@ using lapack   Enables accelerated linear algebra
     requires lapack
     requires blas
 
-clone https://mkeith@bitbucket.org/psrsoft/tempo2.git master
+clone = "-b master https://mkeith@bitbucket.org/psrsoft/tempo2.git"
 
-TEMPO2 = {$PREFIX}/share/tempo2
+TEMPO2 = ${PREFIX}/share/tempo2
 export TEMPO2
 
-configureopts += --with-tempo2-plug-dir={$PREFIX}/share/tempo2/plugins
+configureopts += --with-tempo2-plug-dir=${PREFIX}/share/tempo2/plugins
 
-test0 += abcd
-test1=abcd
-test2+=abcd
-test3 +=abcd
-test4 = abcd
-test5 += "ab cd ef"
-test6+='ab cc dd'
+installsrc += T2runtime
+link T2runtime ${PREFIX}/share/tempo2
 
-
-install += T2runtime
-link T2runtime {$PREFIX}/share/tempo2
-
-preexec += bootstrap
+preexec += ./bootstrap
 
 

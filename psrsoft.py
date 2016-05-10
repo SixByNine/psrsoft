@@ -43,6 +43,8 @@ if __name__=="__main__":
             raise e
 
     logging.debug("psrsoft_dir = %s"%psrsoft_dir)
+    os.environ["psrsoft_dir"]=psrsoft_dir
+    os.environ["PSRSOFT_DIR"]=psrsoft_dir
 
     if args.cfg==None:
         args.cfg = "%s/psrsoft.cfg"%psrsoft_dir
@@ -89,6 +91,8 @@ if __name__=="__main__":
 
 
     logging.debug("Found requests http library %s"%requests.__version__)
+
+    cfg.write(args.cfg)
 
     logging.debug("Good to go... starting psrsoft")
 
