@@ -13,6 +13,9 @@ class package(core.package):
         if not 'makeflags' in self.vars:
             self.vars['makeflags']=[]
 
+        if not 'installflags' in self.vars:
+            self.vars['installflags']=['install']
+
         if not 'configureopts' in self.vars:
             self.vars['configureopts']=[]
 
@@ -27,6 +30,7 @@ class package(core.package):
         logging.debug("begin automake-style package install")
         core.exe("cd %s && %s/configure --prefix=%s %s"%(builddir,srcdir,installdir," ".join(self.vars['configureopts'])))
         core.exe("cd %s && $make %s"%(builddir, " ".join(self.vars['makeflags'])))
+        core.exe("cd %s && $make %s"%(builddir, " ".join(self.vars['installflags'])))
 
     def link(self,installdir, linkdir):
         super(package,self).link(installdir, linkdir)

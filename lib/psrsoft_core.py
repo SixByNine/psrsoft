@@ -25,9 +25,8 @@ class psrsoft(object):
         print pkg
         print pkg.getdeps(self.pkgcache,[])
         ipath,bpath,lpath,spath = self.getpaths(pkg)
-        pkg.build(ipath,bpath,spath)
-        pkg.link(ipath,lpath)
-        exe("rm -rf %s"%(bpath))
+        #pkg.build(ipath,bpath,spath)
+        pkg.unlink(ipath,lpath)
 
     def getpaths(self,pkg):
         uid=uuid.uuid1()
@@ -36,7 +35,10 @@ class psrsoft(object):
         spath = "%s/%s-%s"%(self.cfg['srcpath'],pkg.tag.asfilename(),uid)
         lpath = "%s"%(self.cfg['linkpath'])
 
-        return os.path.expandvars(ipath),os.path.expandvars(bpath),os.path.expandvars(lpath),os.path.expandvars(spath)
+        return os.path.abspath(os.path.expandvars(ipath)),\
+               os.path.abspath(os.path.expandvars(bpath)),\
+               os.path.abspath(os.path.expandvars(lpath)),\
+               os.path.abspath(os.path.expandvars(spath))
 
 
     def buildpkgcache(self):
@@ -225,14 +227,11 @@ class package(object):
         self.xlinks = list()
         self.currentclause=None
         self.kvregex=re.compile("\s*([A-Za-z_][A-Za-z0-9_]*)\s*(\+?=)\s*([^\s'\"#]+|\"[^\"]+\"|'[^']+')")
-        self.vars['linkpaths'] = ['bin','lib','include']
+        self.vars['linkpaths'] = ['bin']
 
 
     def build(self,installdir,builddir,srcdir):
         # get the files!
-        srcdir=os.path.abspath(srcdir)
-        builddir=os.path.abspath(builddir)
-        installdir=os.path.abspath(installdir)
         os.environ["srcdir"]=srcdir
         os.environ["builddir"]=srcdir
         os.environ["installdir"]=srcdir
@@ -240,6 +239,16 @@ class package(object):
         exe("mkdir -p %s"%builddir)
         exe("mkdir -p %s"%srcdir)
         exe("rm -rf %s && mkdir -p %s"%(installdir,installdir))
+        exe("touch %s/env.sh %s/env.csh"%(installdir,installdir))
+
+        if "export" in self.vars:
+            for v in self.vars['export']:
+                if v in self.vars:
+                    os.environ[v]=self.vars[v]
+                    with open("%s/env.sh"%installdir,"a") as f:
+                        f.write("export %s=\"%s\""%(v,self.vars[v]))
+                    with open("%s/env.csh"%installdir,"a") as f:
+                        f.write("setenv %s \"%s\""%(v,self.vars[v]))
 
         if "clone" in self.vars:
             for repo in self.vars['clone']:
@@ -255,30 +264,41 @@ class package(object):
                 shutil.move("%s/%s"%(srcdir,f),installdir)
 
     def link(self,installdir,linkdir):
+        exe("mkdir -p %s/etc/env"%(linkdir))
+        exe("ln -s %s/env.sh %s/etc/env/%s.sh"%(installdir,linkdir,self.name))
+        exe("ln -s %s/env.csh %s/etc/env/%s.csh"%(installdir,linkdir,self.name))
         for p in self.vars['linkpaths']:
+            exe("mkdir -p %s/%s"%(linkdir,p))
             try:
-                for f in os.listdir("%s/%s"%installdir,p):
-                    logger.debug("linking %s"%f)
-                    fname = os.basename(f)
-                    if os.path.isfile(fname):
-                        logger.warning("%s already exists in %s/%s"%(fname,linkdir,p))
-                        logger.warning("Maybe this package is already linked as a different version? Try psrsoft relink %s"%(pkg.name))
+                for f in os.listdir("%s/%s"%(installdir,p)):
+                    logging.debug("linking %s"%f)
+                    fname = os.path.basename(f)
+                    if os.path.isfile("%s/%s/%s"%(linkdir,p,fname)):
+                        logging.warning("%s already exists in %s/%s"%(fname,linkdir,p))
+                        logging.warning("Maybe this package is already linked as a different version? Try psrsoft relink %s"%(self.name))
                         self.unlink(installdir,linkdir)
                         return False
-                    exe("ln -s %s %s/%s/%s"%(f,linkdir,p,fname))
+                    exe("ln -s %s/%s/%s %s/%s/%s"%(installdir,p,f,linkdir,p,fname))
             except IOError as e:
-                logger.warning(e)
-
+                logging.warning(e)
+        for fr,to in self.xlinks:
+            logging.debug("linking %s => %s"%(fr,to))
+            exe("mkdir -p %s/%s"%(linkdir,os.path.dirname(to)))
+            exe("ln -s %s/%s %s/%s"%(installdir,fr,linkdir,to))
         return True
 
 
     def unlink(self,installdir,linkdir):
         matchpath = os.path.abspath(linkdir)+'/'
-        for root, dirnames, filenames in os.walk('linkdir', followlinks=False):
-            for fname in filenames:
-                tgt = os.path.abspath(os.readlink(os.path.join(root, fname)))
-                tgt.startswith(matchpath)
-                logger.debug("remove %s"%tgt)
+        logging.debug("unlinking from %s"%matchpath)
+        for root, dirnames, filenames in os.walk(matchpath, followlinks=False):
+            for fname in filenames+dirnames:
+                linkname=os.path.join(root, fname)
+                if os.path.islink(linkname):
+                    tgt = os.path.abspath(os.readlink(linkname))
+                    tgt.startswith(matchpath)
+                    logging.debug("unlink %s"%linkname)
+                    os.unlink(linkname)
 
 
 
@@ -363,7 +383,7 @@ class package(object):
                 self.currentclause.requires.append(tag(e[0]," ".join(e[1:])))
             return True
         if key=="link":
-            cobj.xlinks.append(rest)
+            cobj.xlinks.append((e[1],e[2]))
             return True
 
         if key=="using" and nic:
