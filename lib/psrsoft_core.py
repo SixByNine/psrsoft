@@ -6,6 +6,8 @@ import re
 import fnmatch
 import os
 import uuid
+import requests
+import tarfile
 
 __version__="2.0.0"
 
@@ -20,13 +22,57 @@ class psrsoft(object):
         package.types["automake"] = psrsoft_automake.package
         logging.debug("PkgTypes: "+", ".join(package.types.keys()))
         self.buildpkgcache()
+        #self.install("tempo2")
+        
+        i,b,l,s = self.getpaths(self.pkgcache[1])
+        self.pkgcache[1].build(i,b,s)
 
-        pkg = package.parse(open("packages/tempo2/tempo2-repo.package"))
-        print pkg
-        print pkg.getdeps(self.pkgcache,[])
-        ipath,bpath,lpath,spath = self.getpaths(pkg)
-        #pkg.build(ipath,bpath,spath)
-        pkg.unlink(ipath,lpath)
+    def install(self,pstring):
+        installlist=[]
+        for p in pstring.split():
+            ptag = tag(p)
+            options = self.find(ptag)
+            logging.debug(options)
+            c = self.userchoice(options)
+            if c:
+                installlist.append(c)
+            else:
+                logging.error("invalid choice")
+                return
+
+
+        print installlist    
+
+    def userchoice(self,options,txt="Please choose from the following:"):
+        if len(options) < 1:
+            return None
+        elif len(options) < 2:
+            return options[0]
+
+        print txt
+        d=1
+        for o in options:
+            print "%d) %s"%(d,o)
+            d+=1
+        ret = raw_input(" >>> ").strip()
+        try:
+            v = int(ret)
+            if v == 0 or v > len(options):
+                return None
+            else:
+                return options[v-1]
+        except ValueError:
+            logging.warning("Invalid integer '%s'"%ret)
+            return None
+
+
+
+    def find(self,t):
+        ret=list()
+        for p in self.pkgcache:
+            if t.compare(p.tag):
+                ret.append(p)
+        return ret
 
     def getpaths(self,pkg):
         uid=uuid.uuid1()
@@ -147,18 +193,30 @@ class tag(object):
     EQUAL="="
     LEQ="<="
     GEQ=">="
+    tagre = re.compile("([A-Za-z0-9_-\.]+)\s*([<>]?=)\s*([A-Za-z0-9_-\.]+)|([A-Za-z0-9_-\.]+)[^=]*")
 
-    def __init__(self,name,version):
-        self.name=name
-        self.version=version
+    def __init__(self,value):
+        match = tag.tagre.match(value)
+        if match:
+            g = match.groups()
+            if g[3] == None:
+                self.name = g[0]
+                self.type = g[1]
+                self.version=g[2]
+            else:
+                self.name = g[3]
+                self.type=""
+                self.version=""
+        else:
+            logging.warning("bad version identifier '%s'"%value)
 
     def compare(self,other):
         if not other.name==self.name:
             return False
         if self.version=="" or other.version=="":
             return True
-        vt1,vv1 = other.splitversion(other.version)
-        vt2,vv2 = self.splitversion(self.version)
+        vt1,vv1 = other.type,other.version
+        vt2,vv2 = self.type,self.version
 
         # Trivial case
         if vt1 is tag.EQUAL and vt2 is tag.EQUAL:
@@ -180,18 +238,8 @@ class tag(object):
 
         return lhs and rhs
 
-
-    def splitversion(self,verstring):
-        e = verstring.split()
-        if len(e)==1 or e[0]=="=":
-            return tag.EQUAL,e
-        if e[0]==">=":
-            return tag.GEQ,e[1]
-        if e[0]=="<=":
-            return tag.LEQ,e[1]
-
     def __str__(self):
-        return "%s %s"%(self.name,self.version)
+        return "%s %s %s"%(self.name,self.type,self.version)
     def __repr__(self):
         return self.asfilename()
 
@@ -230,6 +278,9 @@ class package(object):
         self.vars['linkpaths'] = ['bin']
 
 
+    def __repr__(self):
+        return self.tag.asfilename()
+
     def build(self,installdir,builddir,srcdir):
         # get the files!
         os.environ["srcdir"]=srcdir
@@ -244,7 +295,7 @@ class package(object):
         if "export" in self.vars:
             for v in self.vars['export']:
                 if v in self.vars:
-                    os.environ[v]=self.vars[v]
+                    os.environ[v]=' '.join(self.vars[v])
                     with open("%s/env.sh"%installdir,"a") as f:
                         f.write("export %s=\"%s\""%(v,self.vars[v]))
                     with open("%s/env.csh"%installdir,"a") as f:
@@ -254,6 +305,17 @@ class package(object):
             for repo in self.vars['clone']:
                 if not exe("rmdir %s && git clone %s %s"%(srcdir,repo,srcdir)):
                     return False
+
+        if "tarball" in self.vars:
+            for url in self.vars['tarball']:
+                response = requests.get(url,stream=True)
+                if response.status_code == 200:
+                    tar = tarfile.open(fileobj=response.raw,mode="r|*")
+                    tar.extractall(srcdir)
+                    print os.listdir(srcdir)
+                    if len(os.listdir(srcdir)) == 1:
+                        exe("mv %s/%s/* %s/"%(srcdir,os.listdir(srcdir)[0],srcdir))
+
 
         if "preexec" in self.vars:
             for cmd in self.vars['preexec']:
@@ -370,17 +432,13 @@ class package(object):
             return True
         if key=="version" and nic:
             self.version=rest
-            self.tag = tag(self.name,self.version)
+            self.tag = tag("%s = %s"%(self.name,rest))
             return True
         if key=="type" and nic:
             self.pkgtype=rest
             return True
         if key=="requires":
-            e = rest.split()
-            if nic:
-                self.requires.append(tag(e[0]," ".join(e[1:])))
-            else:
-                self.currentclause.requires.append(tag(e[0]," ".join(e[1:])))
+            cobj.requires.append(tag(rest))
             return True
         if key=="link":
             cobj.xlinks.append((e[1],e[2]))
@@ -411,6 +469,7 @@ class package(object):
             if obj.pkgtype in cls.types:
                 return cls.types[obj.pkgtype](obj)
             else:
+                logging.error("Unknown package type %s (%s)"%(obj.name,obj.pkgtype))
                 return None
 
 class missingpkg(package):
